@@ -68,12 +68,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
+      - name: Verify runner JDK
+        run: |
+          java -version
+          test -n "${JAVA_HOME:-}" || { echo "JAVA_HOME is not set"; exit 1; }
+          echo "Using JAVA_HOME=${JAVA_HOME}"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
