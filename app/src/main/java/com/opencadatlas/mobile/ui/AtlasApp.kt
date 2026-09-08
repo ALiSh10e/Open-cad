@@ -30,6 +30,7 @@ private val Indigo = Color(0xFF8B8AF7)
 private val Background = Color(0xFF0E1119)
 private val SurfaceDark = Color(0xFF171B27)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AtlasApp(vm: AtlasViewModel) {
     val arabic by vm.arabic.collectAsState()
