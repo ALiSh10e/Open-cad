@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("atlas_spatial")
+add_library(atlas_spatial SHARED spatial_engine.cpp)
+find_library(log-lib log)
+target_link_libraries(atlas_spatial ${log-lib})

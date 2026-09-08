@@ -1,4 +1,4 @@
-name: Android Build
+name: Android Native Build
 
 on:
   push:
@@ -11,122 +11,73 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  group: android-native-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  NODE_VERSION: 22
-  PNPM_VERSION: 9.12.0
-  JAVA_VERSION: "17"
-
 jobs:
-  validate:
-    name: Validate TypeScript and tests
+  test:
+    name: Kotlin unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Enable pnpm
-        uses: pnpm/action-setup@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: TypeScript check
-        run: pnpm check
-
-      - name: Unit tests
-        run: pnpm test
-
-  android:
-    name: Build Android release artifacts
-    needs: validate
-    runs-on: ubuntu-latest
-    env:
-      CI: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Enable pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Verify runner JDK
-        run: |
-          java -version
-          test -n "${JAVA_HOME:-}" || { echo "JAVA_HOME is not set"; exit 1; }
-          echo "Using JAVA_HOME=${JAVA_HOME}"
-
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate native Android project when absent
-        shell: bash
-        run: |
-          if [ ! -f android/gradlew ]; then
-            npx expo prebuild --non-interactive
-          fi
-
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v4
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
+          gradle-version: "8.9"
+      - name: Run Kotlin unit tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x android/gradlew
-
-      - name: Assemble release APK and bundle
-        working-directory: android
-        run: ./gradlew :app:assembleRelease :app:bundleRelease --no-daemon --stacktrace
-
+  build:
+    name: Build native APK and AAB
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Assemble native release APK and AAB
+        run: gradle :app:assembleRelease :app:bundleRelease --no-daemon --stacktrace
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: open-cad-atlas-mobile-apk-${{ github.sha }}
-          path: android/app/build/outputs/apk/release/*.apk
+          name: open-cad-atlas-native-apk-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
-
       - name: Upload release AAB
         uses: actions/upload-artifact@v4
         with:
-          name: open-cad-atlas-mobile-aab-${{ github.sha }}
-          path: android/app/build/outputs/bundle/release/*.aab
+          name: open-cad-atlas-native-aab-${{ github.sha }}
+          path: app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
           retention-days: 14
-
-      - name: Publish build summary
+      - name: Build summary
         if: always()
         run: |
           {
-            echo '## Android build outputs'
-            echo ''
-            echo '- APK: uploaded as a workflow artifact'
-            echo '- AAB: uploaded as a workflow artifact'
-            echo '- Signing: debug/release unsigned unless a signing configuration is added'
-            echo '- Data policy: the build does not upload user project files'
+            echo '## Native Android build'
+            echo '- Kotlin + Jetpack Compose'
+            echo '- Room + WorkManager local data pipeline'
+            echo '- C++17 NDK spatial engine via JNI'
+            echo '- APK and AAB uploaded as artifacts'
           } >> "$GITHUB_STEP_SUMMARY"
